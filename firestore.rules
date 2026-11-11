@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{db}/documents {
+  function uid(){return request.auth.uid;}
+  function signed(){return request.auth != null;}
+  function staff(){return signed() && request.auth.token.get('asisten',false)==true;}
+  function validText(s,n){return s is string && s.size()>0 && s.size()<=n && s.matches('(?s).*\\S.*');}
+  match /profiles/{u}{
+   allow read: if signed() && uid()==u;
+   allow create: if signed() && uid()==u && request.resource.data.keys().hasOnly(['name']) && validText(request.resource.data.name,80);
+  }
+  match /classes/{c}{
+   function cls(){return get(/databases/$(db)/documents/classes/$(c)).data;}
+   function owner(){return staff() && cls().owner==uid() && !cls().archived;}
+   function member(){return signed() && !staff() && uid() in cls().members && !cls().archived;}
+   function validClass(d){return d.keys().hasOnly(['title','owner','members','archived']) && validText(d.title,100) && d.members is list && d.members.size()<=200 && d.archived is bool;}
+   allow read: if signed() && ((staff() && resource.data.owner==uid()) || uid() in resource.data.members);
+   allow create: if staff() && validClass(request.resource.data) && request.resource.data.owner==uid() && request.resource.data.members==[] && !request.resource.data.archived;
+   allow update: if owner() && validClass(request.resource.data) && request.resource.data.owner==uid();
+   match /sessions/{s}{
+    function session(){return get(/databases/$(db)/documents/classes/$(c)/sessions/$(s)).data;}
+    function validSession(d){return d.keys().hasOnly(['title','at','status']) && validText(d.title,100) && d.at is timestamp && d.status in ['terjadwal','terbuka','ditutup','diarsipkan'];}
+    allow read: if owner() || member();
+    allow create: if owner() && validSession(request.resource.data) && request.resource.data.status=='terjadwal';
+    allow update: if owner() && validSession(request.resource.data);
+    match /records/{u}{
+     allow read: if owner() || (member() && u==uid());
+     function base(d){return member() && u==uid() && d.created==request.time && d.name==get(/databases/$(db)/documents/profiles/$(u)).data.name;}
+     allow create: if base(request.resource.data) && (
+      (session().status=='terbuka' && request.resource.data.keys().hasOnly(['kind','name','created']) && request.resource.data.kind=='hadir') ||
+      (session().status in ['terjadwal','terbuka'] && request.resource.data.keys().hasOnly(['kind','name','created','reason','decision','ai']) && request.resource.data.kind=='izin' && validText(request.resource.data.reason,1500) && request.resource.data.decision=='menunggu' && request.resource.data.ai=='diproses'));
+     allow update: if owner() && resource.data.kind=='izin' && resource.data.decision=='menunggu' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['decision','reviewer','reviewed']) && request.resource.data.decision in ['diterima','ditolak'] && request.resource.data.reviewer==uid() && request.resource.data.reviewed==request.time;
+    }
+   }
+  }
+ }
+}

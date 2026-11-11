@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Ruang Praktikum",
+    "slug": "ruang-praktikum",
+    "version": "1.0.0",
+    "orientation": "default",
+    "platforms": ["ios", "android"]
+  }
+}
