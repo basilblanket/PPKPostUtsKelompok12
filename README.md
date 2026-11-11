@@ -1,4 +1,8 @@
-# Ruang Praktikum · Sprint 2
+# PPKPostUtsKelompok12
+
+[Sprint 1 — LabAttend](Sprint1/README.md)
+
+## Ruang Praktikum · Sprint 2
 
 Aplikasi React Native (Expo SDK 54) untuk jadwal, presensi dan pemeriksaan izin. Identitas berasal dari Firebase Authentication. Firestore menjadi sumber data bersama. Tidak ada akun dummy atau pemilih peran di aplikasi.
 
