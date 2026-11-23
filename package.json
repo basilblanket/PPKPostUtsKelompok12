@@ -10,12 +10,18 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~54.0.0",
+    "expo-constants": "~18.0.14",
+    "expo-device": "~8.0.10",
+    "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.17",
     "firebase": "12.4.0",
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-native": "0.81.5",
+    "react-native-maps": "1.20.1"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
+    "@types/react": "~19.1.10",
     "firebase-tools": "^14.27.0"
   }
 }

@@ -5,30 +5,101 @@ service cloud.firestore {
   function signed(){return request.auth != null;}
   function staff(){return signed() && request.auth.token.get('asisten',false)==true;}
   function validText(s,n){return s is string && s.size()>0 && s.size()<=n && s.matches('(?s).*\\S.*');}
+
+  // Profil pengguna & token push notification
   match /profiles/{u}{
-   allow read: if signed() && uid()==u;
-   allow create: if signed() && uid()==u && request.resource.data.keys().hasOnly(['name']) && validText(request.resource.data.name,80);
+   function validProfile(d){
+    return d.keys().hasOnly(['name','expoPushToken','pushUpdatedAt'])
+     && (!('name' in d) || validText(d.name,80))
+     && (!('expoPushToken' in d) || (d.expoPushToken is string && d.expoPushToken.size()<=200))
+     && (!('pushUpdatedAt' in d) || d.pushUpdatedAt is timestamp);
+   }
+   allow read: if signed() && (uid()==u || staff());
+   allow create: if signed() && uid()==u && validProfile(request.resource.data);
+   allow update: if signed() && uid()==u && validProfile(request.resource.data);
   }
+
+  // Data lokasi dan radius laboratorium Informatika
+  match /labs/{labId}{
+   function validLab(d){
+    return d.keys().hasOnly(['name','building','latitude','longitude','radius','updatedAt'])
+     && validText(d.name,80)
+     && d.building is string && d.building.size()<=100
+     && d.latitude is number && d.latitude>=-90 && d.latitude<=90
+     && d.longitude is number && d.longitude>=-180 && d.longitude<=180
+     && d.radius is number && d.radius>=5 && d.radius<=1000
+     && d.updatedAt==request.time;
+   }
+   allow read: if signed();
+   allow create, update: if staff() && validLab(request.resource.data);
+   allow delete: if staff();
+  }
+
+  // Log pengiriman push notification
+  match /notifications/{notifId}{
+   function validNotif(d){
+    return d.keys().hasOnly(['recipients','title','body','data','sentCount','createdAt'])
+     && d.recipients is list && d.recipients.size()>0 && d.recipients.size()<=200
+     && validText(d.title,150) && validText(d.body,500)
+     && d.data is map
+     && d.sentCount is number && d.sentCount>=0
+     && d.createdAt==request.time;
+   }
+   allow read: if signed() && (staff() || uid() in resource.data.recipients);
+   allow create: if staff() && validNotif(request.resource.data);
+  }
+
+  // Mendukung collectionGroup("sessions") pada Halaman Presensi & Peta Lab
+  match /{path=**}/sessions/{s}{
+   allow read: if signed();
+  }
+
   match /classes/{c}{
    function cls(){return get(/databases/$(db)/documents/classes/$(c)).data;}
    function owner(){return staff() && cls().owner==uid() && !cls().archived;}
    function member(){return signed() && !staff() && uid() in cls().members && !cls().archived;}
    function validClass(d){return d.keys().hasOnly(['title','owner','members','archived']) && validText(d.title,100) && d.members is list && d.members.size()<=200 && d.archived is bool;}
-   allow read: if signed() && ((staff() && resource.data.owner==uid()) || uid() in resource.data.members);
+
+   // Dibaca pengguna login agar informasi kelas pada Peta Lab dapat ditampilkan
+   allow read: if signed();
    allow create: if staff() && validClass(request.resource.data) && request.resource.data.owner==uid() && request.resource.data.members==[] && !request.resource.data.archived;
    allow update: if owner() && validClass(request.resource.data) && request.resource.data.owner==uid();
+
    match /sessions/{s}{
     function session(){return get(/databases/$(db)/documents/classes/$(c)/sessions/$(s)).data;}
-    function validSession(d){return d.keys().hasOnly(['title','at','status']) && validText(d.title,100) && d.at is timestamp && d.status in ['terjadwal','terbuka','ditutup','diarsipkan'];}
-    allow read: if owner() || member();
-    allow create: if owner() && validSession(request.resource.data) && request.resource.data.status=='terjadwal';
+    function validSession(d){
+     return d.keys().hasOnly(['title','at','status','labId','radius','classId','classTitle'])
+      && validText(d.title,100)
+      && d.at is timestamp
+      && d.status in ['terjadwal','terbuka','ditutup','diarsipkan']
+      && (!('labId' in d) || validText(d.labId,128))
+      && (!('radius' in d) || (d.radius is number && d.radius>=5 && d.radius<=1000))
+      && (!('classId' in d) || d.classId==c)
+      && (!('classTitle' in d) || validText(d.classTitle,100));
+    }
+    allow read: if signed();
+    allow create: if owner() && validSession(request.resource.data) && 'labId' in request.resource.data && request.resource.data.status=='terjadwal';
     allow update: if owner() && validSession(request.resource.data);
+
     match /records/{u}{
      allow read: if owner() || (member() && u==uid());
      function base(d){return member() && u==uid() && d.created==request.time && d.name==get(/databases/$(db)/documents/profiles/$(u)).data.name;}
+     function validLoc(l){
+      return l is map
+       && l.keys().hasOnly(['latitude','longitude','accuracy','distance','maxRadius','labId','labName'])
+       && l.latitude is number && l.latitude>=-90 && l.latitude<=90
+       && l.longitude is number && l.longitude>=-180 && l.longitude<=180
+       && l.accuracy is number && l.accuracy>=0
+       && l.distance is number && l.distance>=0
+       && l.maxRadius is number && l.maxRadius>=5 && l.maxRadius<=1000
+       && l.distance<=l.maxRadius
+       && validText(l.labId,128)
+       && validText(l.labName,80);
+     }
      allow create: if base(request.resource.data) && (
-      (session().status=='terbuka' && request.resource.data.keys().hasOnly(['kind','name','created']) && request.resource.data.kind=='hadir') ||
-      (session().status in ['terjadwal','terbuka'] && request.resource.data.keys().hasOnly(['kind','name','created','reason','decision','ai']) && request.resource.data.kind=='izin' && validText(request.resource.data.reason,1500) && request.resource.data.decision=='menunggu' && request.resource.data.ai=='diproses'));
+      (session().status=='terbuka' && request.resource.data.keys().hasOnly(['kind','name','created','location']) && request.resource.data.kind=='hadir' && validLoc(request.resource.data.location)) ||
+      (session().status in ['terjadwal','terbuka'] && request.resource.data.keys().hasOnly(['kind','name','created','reason','decision','ai']) && request.resource.data.kind=='izin' && validText(request.resource.data.reason,1500) && request.resource.data.decision=='menunggu' && request.resource.data.ai=='diproses')
+     );
      allow update: if owner() && resource.data.kind=='izin' && resource.data.decision=='menunggu' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['decision','reviewer','reviewed']) && request.resource.data.decision in ['diterima','ditolak'] && request.resource.data.reviewer==uid() && request.resource.data.reviewed==request.time;
     }
    }
