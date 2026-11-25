@@ -1,0 +1,30 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  },
+  "emulators": {
+    "firestore": {
+      "port": 18480,
+      "websocketPort": 18482
+    },
+    "auth": {
+      "port": 18490
+    },
+    "functions": {
+      "port": 18491
+    },
+    "hub": {
+      "port": 18483
+    },
+    "logging": {
+      "port": 18484
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
+}

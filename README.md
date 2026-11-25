@@ -1,42 +1,108 @@
-# PPKPostUtsKelompok12
+# Ruang Praktikum — PPKPostUtsKelompok12
 
-[Sprint 1 — LabAttend](Sprint1/README.md)
+Aplikasi React Native / Expo SDK 54 untuk Sprint 1–3. Firebase Authentication menjadi sumber identitas dan Cloud Firestore menjadi penyimpanan bersama. UI web, Android, dan iOS berasal dari proyek yang sama.
 
-## Ruang Praktikum · Sprint 2
+## Jalankan Firebase online tanpa Blaze
 
-Aplikasi React Native (Expo SDK 54) untuk jadwal, presensi dan pemeriksaan izin. Identitas berasal dari Firebase Authentication. Firestore menjadi sumber data bersama. Tidak ada akun dummy atau pemilih peran di aplikasi.
+Node.js 22 diperlukan. Proyek dapat tetap di paket Spark: backend Node.js di laptop menjalankan validasi presensi, AI, dan pengiriman push. Akun dan data tetap tersimpan di **Firebase online**, bukan emulator. Biarkan backend tetap menyala selama demo.
 
-## Menjalankan aplikasi
+```sh
+npm ci
+npm ci --prefix functions
+# Isi konfigurasi Web Firebase pada .env dari .env.example jika belum ada.
+npx firebase login
+node scripts/setup-server.cjs
+npm run backend
+```
 
-1. Gunakan Node.js 22. Buat proyek Firebase, daftarkan aplikasi **Web** untuk memperoleh konfigurasi SDK, aktifkan Authentication → Email/Password, dan buat database Cloud Firestore (default).
-2. Di direktori proyek jalankan `npm ci`, lalu `cp .env.example .env`. Isi ketiga variabel dari konfigurasi Firebase Web. Jangan masukkan token AI di sini.
-3. Jalankan `npx firebase login` dan `npx firebase use --add` untuk memilih proyek. Jalankan `npx firebase deploy --only firestore:rules`.
-4. Dari direktori functions jalankan `npm ci`. Untuk API pengajar, buat file `functions/.env` berisi `AI_URL=https://alamat-api-pengajar/endpoint`. Dari akar proyek jalankan `npx firebase functions:secrets:set AI_TOKEN` dan isi token, atau NONE untuk API tanpa token. Deploy dengan `npx firebase deploy --only functions:classifyLeave`. Deploy Functions generasi kedua memerlukan proyek dengan penagihan diaktifkan.
-5. Jalankan `npm start` dan buka dengan runtime Expo Go yang mendukung SDK 54 atau development build Android/iOS. Gunakan dua emulator/perangkat untuk demonstrasi.
-6. Daftarkan kedua akun dan simpan nama. Semua akun baru adalah praktikan. Untuk asisten, administrator menjalankan `node functions/grant.cjs PROJECT_ID UID` memakai Application Default Credentials dengan hak Firebase Auth Admin di proyek tersebut. UID terlihat di halaman Kelas saya. Keluar dan login kembali untuk memuat klaim asisten. Simpan kredensial admin di luar repositori.
+Terminal kedua:
 
-## Kontrak AI yang perlu dicocokkan
+```sh
+npx expo start --web --localhost --port 8082
+```
 
-Kontrak asli pengajar belum disertakan. Adaptor di functions/index.js mengirim POST HTTPS dengan JSON `{"reason":"alasan pengguna"}` dan opsional Authorization: Bearer. Respons yang diharapkan: `{"category":"Kesehatan"}`. Jika kontraknya berbeda, sesuaikan pembentukan body/header dan pembacaan category sebelum deploy. Hanya alasan yang dikirim. Saat API gagal, respons tidak valid, atau batas waktu 10 detik terlampaui, izin tetap tersimpan dengan klasifikasi “tidak tersedia”. Jika fungsi belum dipasang, indikator tetap “diproses”. Fungsi tidak menulis keputusan asisten.
+Buka http://localhost:8082. `EXPO_PUBLIC_BACKEND_URL` mengarah ke http://localhost:8787. Backend hanya mendengarkan loopback secara default. `GET /health` memperlihatkan proyek dan mode koneksinya. Kredensial Firebase CLI yang sudah diizinkan digunakan hanya oleh backend; salinan ADC di `.firebase/local-adc.json` memiliki izin file 0600 dan diabaikan Git. Alternatif: set `GOOGLE_APPLICATION_CREDENTIALS` ke kredensial server sendiri. Jangan membagikan `.firebase`, `.env`, `.env.server`, token, atau service-account JSON.
 
-## Demonstrasi dua perangkat
+Pasang aturan Firestore dengan `npx firebase deploy --only firestore:rules`. Jangan memakai aturan lama: presensi harus melalui backend. Daftarkan akun praktikan melalui aplikasi. Akun asisten menggunakan custom claim `asisten: true`, ditetapkan administrator dengan `functions/grant.cjs`. Password akun Firebase online tidak sama dengan password emulator.
 
-- Asisten membuat kelas, menambahkan UID praktikan, lalu membuat dua sesi dengan tanggal dan waktu lokal. Praktikan melihat kelas dan jadwal yang sama.
-- Pada sesi pertama, asisten memilih **Buka sesi** dan mengonfirmasi. Praktikan membuka detail sesi dan memilih **Catat kehadiran saya**. Cocokkan nama dan waktu pada rekap asisten, lalu tutup sesi. Buka kembali aplikasi untuk melihat catatan tersimpan.
-- Pada sesi kedua, praktikan menulis alasan dan memilih **Ajukan izin**. Kedua akun dapat melihat alasan, progres klasifikasi, dan status menunggu. Asisten membaca kategori jika tersedia, kemudian menerima atau menolak melalui dialog konfirmasi. Praktikan melihat keputusan di detail sesi tanpa memuat ulang.
-- Uji batas akses dengan akun ketiga tanpa keanggotaan. Mengeluarkan peserta mencabut akses kelas. Menghapus kelas atau sesi dari jadwal dilakukan melalui arsip agar riwayat tidak terhapus secara fisik.
+Lokasi awal yang diberikan pengguna: **Laboratorium Informatika**, latitude **-7.047849**, longitude **110.440836**, radius awal **100 m**. Radius/nama dapat diubah lewat Peta & Laboratorium oleh pemilik laboratorium. `node scripts/init-lab.cjs` membuat lokasi awal dan menghubungkan sesi tanpa lokasi milik akun asisten yang ditentukan `ASSISTANT_EMAIL` (default akun demo asisten). Script tidak mengubah password atau menghapus presensi.
 
-## Struktur dan konsistensi
+## Demo lokal Sprint 1
 
-| Lokasi Firestore | Isi dan akses |
-| --- | --- |
-| profiles/{uid} | Nama identitas yang ditetapkan oleh pemilik akun saat pertama masuk. |
-| classes/{kelas} | Nama, UID pemilik, daftar UID peserta (maks. 200), status arsip. Asisten hanya mengelola kelas miliknya. |
-| classes/{kelas}/sessions/{sesi} | Nama praktikum, waktu Firestore Timestamp, status sesi. Satu sesi mewakili satu entri jadwal. |
-| …/sessions/{sesi}/records/{uid} | Satu catatan per peserta: presensi atau izin. Waktu dari server. Praktikan hanya membaca catatannya; asisten pemilik membaca rekap. |
+Pilih **Demo lokal Sprint 1** di aplikasi. Pilih peran asisten/praktikan dan identitas dummy, buka sesi melalui Modal, lakukan presensi, lalu ganti ke asisten untuk melihat rekap dan menutup sesi. Data hanya di state dan direset saat keluar dari mode ini. Mode ini tidak memanggil Firebase untuk menyimpan data.
 
-Klien memakai onSnapshot pada kelas, sesi, dan catatan. Permintaan menulis presensi diperiksa terhadap status sesi di server. UID tetap sebagai ID dokumen mencegah presensi ganda termasuk dari perangkat berbeda. Setelah izin diajukan, peserta tidak dapat menggantinya dengan presensi; keputusan asisten bersifat final. Penyimpanan permanen ada di server; status “Mengirim perubahan” atau “Menunggu koneksi” belum merupakan konfirmasi penyimpanan server. Koneksi diperlukan untuk memuat kembali data setelah aplikasi ditutup.
+## Demo emulator Sprint 2–3
 
-## Verifikasi
+Untuk pengujian tanpa menyentuh data cloud, perlu Java 21:
 
-Jalankan `npm test` (Java 21 untuk emulator). Uji ini memakai proyek lokal demo-praktikum, menyimulasikan identitas dua peran, memeriksa akses lintas pengguna, menolak presensi di luar sesi atau ganda, mengamati listener rekap dan keputusan, serta memastikan klasifikasi tidak mengubah status izin. Penulisan klasifikasi pada uji ini disimulasikan; verifikasi endpoint pengajar sungguhan dilakukan setelah konfigurasi tersedia. Untuk memeriksa bundling, jalankan `npx expo export --platform android --platform ios`.
+```sh
+npm run demo
+```
+
+Buka http://localhost:8083. Akun emulator `asisten@demo.test` dan `praktikan@demo.test`, password keduanya `Praktikum123`. Port: Auth 19099, Firestore 18180, Functions 15001. Data disimpan di `.demo-data` saat proses dihentikan secara normal dengan Ctrl+C. Konfigurasi AI emulator default sengaja tidak tersedia, sehingga izin tetap menunggu keputusan asisten. `functions/.env.local` dan `.secret.local` dibuat untuk emulator, tidak dikirim ke Git.
+
+## Alur Sprint 2–3
+
+1. Asisten membuat kelas, memasukkan UID praktikan yang telah menyimpan profil, membuat laboratorium atau memakai lokasi yang tersedia, dan membuat sesi dengan laboratorium serta jadwal.
+2. Asisten membuka sesi. Praktikan membuka detail → **Buka halaman presensi** → periksa lokasi → catat presensi. Posisi diambil ulang ketika tombol simpan ditekan.
+3. Backend memverifikasi ID token, keanggotaan, peran, status sesi, laboratorium aktif, usia lokasi ≤60 detik, akurasi ≤min(radius,100 m), dan jarak Haversine ≤radius. Lokasi simulasi yang ditandai perangkat ditolak. Transaksi membuat dokumen UID hanya sekali; perubahan sesi/lab bersamaan memicu pengulangan validasi transaksi.
+4. Rekap asisten dan catatan praktikan diperbarui oleh listener Firestore. Asisten menutup sesi. Presensi tidak pernah dianggap berhasil hanya dari hasil pemeriksaan UI.
+5. Untuk izin, praktikan mengisi alasan; backend mengklasifikasikan lewat API. Asisten membaca alasan/kategori dan memutuskan menerima/menolak. AI **tidak** mengubah keputusan. Setelah izin dibuat, peserta tidak dapat menggantinya dengan presensi.
+6. Peta menampilkan laboratorium dan radius. **Tampilkan lokasi saya** meminta izin dan mengikuti posisi selama halaman digunakan. Klik marker/daftar lab untuk melihat sesi terbuka dan sesi terjadwal berikutnya dari kelas yang boleh diakses akun.
+7. Buka **Notifikasi** dan aktifkan pada perangkat. Event pembukaan sesi, perubahan judul/waktu/laboratorium sesi, dan keputusan izin membuat pemberitahuan bagi peserta terkait. Status “dikirim ke layanan push” bukan bukti perangkat telah menampilkannya. Jika tidak ada perangkat/izin atau layanan gagal, inbox tetap tersedia dan menampilkan statusnya.
+
+Backend lokal mengamati perubahan Firestore dan menyimpan checkpoint untuk melanjutkan pengamatan setelah restart. Ini untuk demo dengan backend tetap menyala; perubahan bolak-balik saat backend mati dapat tidak teramati. Untuk deployment yang harus menangkap setiap event, gunakan Cloud Functions atau backend hosted dengan antrean event. GPS berasal dari perangkat dan bukan jaminan anti-pemalsuan mutlak.
+
+## AI pengajar
+
+Isi **hanya** `.env.server` untuk backend laptop, lalu mulai ulang backend:
+
+```dotenv
+AI_PROTOCOL=category
+AI_URL=https://alamat-endpoint-pengajar
+AI_TOKEN=token_pengajar
+AI_MODEL=
+```
+
+`category`: POST JSON `{"reason":"..."}`, respons `{"category":"Kesehatan"}`.
+
+`openai`: base URL seperti `https://api.clevecode.com/v1`, ditambahkan `/chat/completions`; isi `AI_MODEL` dengan ID model yang benar dan `AI_TOKEN` dengan key. API harus kompatibel dengan Chat Completions. Model diminta mengembalikan JSON `{"category":"..."}`. Nama model dan key aktif belum dikonfigurasi pada pengerjaan ini; klasifikasi nyata masih perlu diverifikasi dengan layanan pengajar. Hanya alasan yang dikirim. Timeout 15 detik, HTTP error, konfigurasi kosong, atau format tidak valid menghasilkan “tidak tersedia”. Asisten dapat mencoba klasifikasi ulang. AI tidak menerima UID, password, atau koordinat.
+
+## Push dan Maps perangkat
+
+Web menggunakan Web Push/VAPID dan service worker, Maps menggunakan Leaflet/OpenStreetMap. `setup-server.cjs` menghasilkan kunci VAPID lokal; hanya public key yang masuk `.env` klien. Browser memerlukan HTTPS atau localhost, izin notifikasi, dan layanan push yang didukung. Satu profil browser menerima push untuk satu akun; gunakan profil/browser berbeda untuk dua akun. Logout melepaskan registrasi perangkat.
+
+Native menggunakan `expo-location`, `react-native-maps`, dan Expo Push. Konfigurasikan `EAS_PROJECT_ID` serta kredensial FCM/APNs pada EAS dan `GOOGLE_MAPS_ANDROID_API_KEY` sebelum membuat development build. `app.config.js` membaca konfigurasi tersebut; `eas.json` tersedia. Push Android tidak tersedia di Expo Go SDK 54. Build export tidak sama dengan pengujian APK/iPhone fisik.
+
+Untuk HP, `localhost` menunjuk HP itu sendiri. Backend harus tersedia melalui alamat HTTPS yang dapat dijangkau HP dan dimasukkan ke `EXPO_PUBLIC_BACKEND_URL`; jalankan Expo sesuai jaringan perangkat. Jangan mengekspos kredensial admin ke aplikasi.
+
+## Alternatif Cloud Functions
+
+Opsional jika memilih Blaze: isi parameter AI dan VAPID di `functions/.env.PROJECT_ID`; simpan `AI_TOKEN` dan `VAPID_PRIVATE_KEY` dengan Firebase Secret Manager. Deploy Functions dan rules, hapus `EXPO_PUBLIC_BACKEND_URL`, lalu restart Expo. Region callable: `asia-southeast2`. Paket Spark tidak mendukung deployment Cloud Functions; backend laptop disediakan agar tidak perlu upgrade untuk demo.
+
+## Struktur Firestore
+
+- `profiles/{uid}`: nama; peran berasal dari custom claims Auth.
+- `labs/{labId}`: nama, koordinat, radius, pemilik, status arsip.
+- `classes/{classId}`: judul, pemilik, anggota, arsip.
+- `classes/{classId}/sessions/{sessionId}`: judul, Timestamp jadwal, status, `labId`.
+- `…/records/{uid}`: presensi dengan lokasi/jarak atau izin dengan alasan/klasifikasi/keputusan.
+- `profiles/{uid}/devices/{id}`: registrasi push perangkat, hanya pemilik yang mengakses.
+- `profiles/{uid}/notifications/{id}`: inbox buatan backend, pemilik hanya boleh menandai dibaca.
+- `_backendState/{id}`: checkpoint internal backend, tidak bisa diakses klien.
+
+Rules menolak presensi langsung dari SDK, perubahan peran oleh pengguna, pembacaan catatan orang lain, dan keputusan izin oleh praktikan. Kelas/sesi dihapus dari daftar dengan arsip agar riwayat dipertahankan. Validasi tanggal server mengikuti hari Asia/Jakarta.
+
+## Pengujian
+
+```sh
+npm test                 # Firestore Rules / isolasi pengguna / listener
+npm run test:domain      # radius, akurasi, waktu, status, peran
+npm run test:integration # Auth + Firestore + callable + event pada emulator
+npm run test:backend     # jalur HTTP backend laptop dengan emulator
+npx expo export --platform all --output-dir dist
+```
+
+Test tidak mengirim push ke perangkat sungguhan dan tidak memanggil model pengajar dengan key asli. Deployment rules, login Firebase online, pembacaan koordinat online, dan penolakan akses backend untuk nonanggota telah diverifikasi. Uji lokasi nyata dan push end-to-end perlu perangkat serta izin pengguna.
+
+Pemeriksaan API Clevecode `GET /v1/models` pada pengerjaan ini mendapat HTTP 403 dengan key yang sebelumnya diberikan. Respons tersebut belum membuktikan model/kontrak yang tersedia; konfigurasi AI nyata tetap perlu akses API yang diterima penyedia.

@@ -6,3 +6,7 @@ node_modules/
 dist/
 *.log
 .firebase/
+.demo-data/
+.DS_Store
+.secret.local
+!.env.server.example

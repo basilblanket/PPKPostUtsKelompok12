@@ -5,7 +5,23 @@ service cloud.firestore {
   function signed(){return request.auth != null;}
   function staff(){return signed() && request.auth.token.get('asisten',false)==true;}
   function validText(s,n){return s is string && s.size()>0 && s.size()<=n && s.matches('(?s).*\\S.*');}
+  match /labs/{lab}{
+   function valid(d){return d.keys().hasOnly(['title','owner','latitude','longitude','radius','archived']) && validText(d.title,100) && d.latitude is number && d.latitude>=-90 && d.latitude<=90 && d.longitude is number && d.longitude>=-180 && d.longitude<=180 && d.radius is number && d.radius>=10 && d.radius<=1000 && d.archived is bool;}
+   allow read: if signed();
+   allow create: if staff() && valid(request.resource.data) && request.resource.data.owner==uid() && !request.resource.data.archived;
+   allow update: if staff() && resource.data.owner==uid() && valid(request.resource.data) && request.resource.data.owner==uid();
+  }
   match /profiles/{u}{
+   match /devices/{device}{
+    allow read, delete: if signed() && uid()==u;
+    allow create, update: if signed() && uid()==u && request.resource.data.updated==request.time && (
+      (request.resource.data.keys().hasOnly(['platform','token','updated']) && request.resource.data.platform=='expo' && validText(request.resource.data.token,300)) ||
+      (request.resource.data.keys().hasOnly(['platform','subscription','updated']) && request.resource.data.platform=='web' && validText(request.resource.data.subscription,4096)));
+   }
+   match /notifications/{notification}{
+    allow read: if signed() && uid()==u;
+    allow update: if signed() && uid()==u && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) && request.resource.data.read is bool;
+   }
    allow read: if signed() && uid()==u;
    allow create: if signed() && uid()==u && request.resource.data.keys().hasOnly(['name']) && validText(request.resource.data.name,80);
   }
@@ -13,21 +29,27 @@ service cloud.firestore {
    function cls(){return get(/databases/$(db)/documents/classes/$(c)).data;}
    function owner(){return staff() && cls().owner==uid() && !cls().archived;}
    function member(){return signed() && !staff() && uid() in cls().members && !cls().archived;}
-   function validClass(d){return d.keys().hasOnly(['title','owner','members','archived']) && validText(d.title,100) && d.members is list && d.members.size()<=200 && d.archived is bool;}
+   function validClass(d){return d.keys().hasOnly(['title','owner','members','archived']) && validText(d.title,100) && d.members is list && d.members.size()<=200 && d.members.toSet().size()==d.members.size() && d.archived is bool;}
+   function validMembership(before, after){
+    return after.removeAll(before).size()==0 ||
+      (after.size()==before.size()+1 && after==before.concat([after[before.size()]]) &&
+       after[before.size()] is string && exists(/databases/$(db)/documents/profiles/$(after[before.size()])));
+   }
    allow read: if signed() && ((staff() && resource.data.owner==uid()) || uid() in resource.data.members);
    allow create: if staff() && validClass(request.resource.data) && request.resource.data.owner==uid() && request.resource.data.members==[] && !request.resource.data.archived;
-   allow update: if owner() && validClass(request.resource.data) && request.resource.data.owner==uid();
+   allow update: if owner() && validClass(request.resource.data) && request.resource.data.owner==uid() && validMembership(resource.data.members,request.resource.data.members);
    match /sessions/{s}{
     function session(){return get(/databases/$(db)/documents/classes/$(c)/sessions/$(s)).data;}
-    function validSession(d){return d.keys().hasOnly(['title','at','status']) && validText(d.title,100) && d.at is timestamp && d.status in ['terjadwal','terbuka','ditutup','diarsipkan'];}
+    function validSession(d){return d.keys().hasOnly(['title','at','status','labId']) && validText(d.title,100) && d.at is timestamp && d.status in ['terjadwal','terbuka','ditutup','diarsipkan'];}
     allow read: if owner() || member();
-    allow create: if owner() && validSession(request.resource.data) && request.resource.data.status=='terjadwal';
-    allow update: if owner() && validSession(request.resource.data);
+    function labValid(d){return d.labId is string && exists(/databases/$(db)/documents/labs/$(d.labId)) && !get(/databases/$(db)/documents/labs/$(d.labId)).data.archived;}
+    function future(d){return d.at >= (request.time + duration.value(7,'h')).date() - duration.value(7,'h');}
+    allow create: if owner() && validSession(request.resource.data) && labValid(request.resource.data) && future(request.resource.data) && request.resource.data.status=='terjadwal';
+    allow update: if owner() && validSession(request.resource.data) && (request.resource.data.at==resource.data.at || future(request.resource.data)) && (request.resource.data.status=='diarsipkan' || labValid(request.resource.data));
     match /records/{u}{
      allow read: if owner() || (member() && u==uid());
      function base(d){return member() && u==uid() && d.created==request.time && d.name==get(/databases/$(db)/documents/profiles/$(u)).data.name;}
      allow create: if base(request.resource.data) && (
-      (session().status=='terbuka' && request.resource.data.keys().hasOnly(['kind','name','created']) && request.resource.data.kind=='hadir') ||
       (session().status in ['terjadwal','terbuka'] && request.resource.data.keys().hasOnly(['kind','name','created','reason','decision','ai']) && request.resource.data.kind=='izin' && validText(request.resource.data.reason,1500) && request.resource.data.decision=='menunggu' && request.resource.data.ai=='diproses'));
      allow update: if owner() && resource.data.kind=='izin' && resource.data.decision=='menunggu' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['decision','reviewer','reviewed']) && request.resource.data.decision in ['diterima','ditolak'] && request.resource.data.reviewer==uid() && request.resource.data.reviewed==request.time;
     }

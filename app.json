@@ -4,6 +4,21 @@
     "slug": "ruang-praktikum",
     "version": "1.0.0",
     "orientation": "default",
-    "platforms": ["ios", "android"]
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Izinkan lokasi untuk validasi presensi dan peta laboratorium."
+        }
+      ],
+      "expo-notifications"
+    ]
   }
 }

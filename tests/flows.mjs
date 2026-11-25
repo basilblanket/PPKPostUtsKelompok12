@@ -14,7 +14,7 @@ import {
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 const env = await initializeTestEnvironment({
-  projectId: "demo-praktikum",
+  projectId: "demo-audit",
   firestore: { rules: readFileSync("firestore.rules", "utf8") },
 });
 try {
@@ -34,14 +34,44 @@ try {
   const cls = { title: "Algoritma", owner: "a", members: [], archived: false };
   await assertFails(setDoc(doc(p, c), { ...cls, owner: "p" }));
   await setDoc(doc(a, c), cls);
+  await assertFails(updateDoc(doc(a, c), { members: ["uid-salah"] }));
+  await updateDoc(doc(a, c), { members: ["p"] });
   await updateDoc(doc(a, c), { members: ["p", "q"] });
+  await assertFails(updateDoc(doc(a, c), { members: ["p", "q", "p"] }));
+  await assertFails(updateDoc(doc(a, c), { owner: "b" }));
+  await setDoc(doc(a, "labs/test"), {
+    title: "Lab Test",
+    owner: "a",
+    latitude: -7,
+    longitude: 110,
+    radius: 100,
+    archived: false,
+  });
+  await assertFails(
+    setDoc(doc(p, "labs/illegal"), {
+      title: "Bad",
+      owner: "p",
+      latitude: 0,
+      longitude: 0,
+      radius: 100,
+      archived: false,
+    }),
+  );
   await setDoc(doc(a, s), {
     title: "Sorting",
+    labId: "test",
     at: Timestamp.now(),
     status: "terjadwal",
   });
   const hadir = { name: "Putri", kind: "hadir", created: serverTimestamp() };
   await assertFails(setDoc(doc(p, r + "p"), hadir));
+  await assertFails(
+    setDoc(doc(q, r + "q"), {
+      ...hadir,
+      name: "Raka",
+      location: { latitude: -7, longitude: 110 },
+    }),
+  );
   await assertFails(getDoc(doc(outsider, s)));
   await assertFails(updateDoc(doc(b, s), { status: "terbuka" }));
   await updateDoc(doc(a, s), { status: "terbuka" });
@@ -72,7 +102,10 @@ try {
   await watch(
     doc(a, r + "p"),
     (x) => x.data()?.kind === "hadir",
-    () => setDoc(doc(p, r + "p"), hadir),
+    () =>
+      env.withSecurityRulesDisabled((ctx) =>
+        setDoc(doc(ctx.firestore(), r + "p"), hadir),
+      ),
   );
   await assertFails(setDoc(doc(p, r + "p"), hadir));
   await assertFails(getDoc(doc(q, r + "p")));
@@ -104,6 +137,23 @@ try {
       }),
   );
   await updateDoc(doc(a, s), { status: "ditutup" });
+  const concurrent = c + "/sessions/concurrent";
+  await setDoc(doc(a, concurrent), {
+    title: "Concurrent",
+    labId: "test",
+    at: Timestamp.now(),
+    status: "terjadwal",
+  });
+  await updateDoc(doc(a, concurrent), { status: "terbuka" });
+  const attempts = await Promise.allSettled([
+    setDoc(doc(p, concurrent + "/records/p"), hadir),
+    setDoc(doc(p, concurrent + "/records/p"), hadir),
+  ]);
+  assert.equal(attempts.filter((x) => x.status === "fulfilled").length, 0);
+  await updateDoc(doc(a, c), { members: ["p"] });
+  await assertFails(getDoc(doc(q, r + "q")));
+  await updateDoc(doc(a, c), { archived: true });
+  await assertFails(setDoc(doc(p, concurrent + "/records/p"), hadir));
   console.log(
     "Lulus: otorisasi, buka/tutup, presensi tunggal, isolasi peserta, izin, keputusan, listener dua akun.",
   );

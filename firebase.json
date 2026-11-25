@@ -8,17 +8,23 @@
   },
   "emulators": {
     "firestore": {
-      "port": 8180,
-      "websocketPort": 9152
+      "port": 18180,
+      "websocketPort": 19152
     },
     "ui": {
       "enabled": false
     },
     "hub": {
-      "port": 4410
+      "port": 14410
     },
     "logging": {
-      "port": 4510
+      "port": 14510
+    },
+    "auth": {
+      "port": 19099
+    },
+    "functions": {
+      "port": 15001
     }
   }
 }

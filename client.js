@@ -1,3 +1,4 @@
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 import { initializeApp } from "firebase/app";
 import { initializeAuth, getReactNativePersistence } from "firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -13,3 +14,5 @@ export const auth =
   app &&
   initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) });
 export const db = app && getFirestore(app);
+
+export const functions = app && getFunctions(app, "asia-southeast2");

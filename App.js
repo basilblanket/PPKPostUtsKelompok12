@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Alert,
   useWindowDimensions,
   View,
-  Text,
+  Text as NativeText,
   TextInput,
   Pressable,
   ScrollView,
@@ -32,23 +32,62 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { auth, db, configured } from "./client";
+import SchedulePicker from "./SchedulePicker";
+import ConfirmHost, { confirmAction } from "./src/Confirm";
+import {
+  MapsScreen,
+  AttendanceScreen,
+  LabPicker,
+  NotificationsPanel,
+} from "./src/Sprint3";
+import LocalDemo from "./src/LocalDemo";
+import { disablePush } from "./src/notifications";
+import { callBackend } from "./src/backend";
 
-const ink = "#172f32",
-  teal = "#096557",
-  muted = "#51696b",
-  border = "#d4e1dc";
+import {
+  useFonts,
+  DMSans_400Regular,
+  DMSans_600SemiBold,
+  DMSans_700Bold,
+} from "@expo-google-fonts/dm-sans";
+
+function Text({ style, ...props }) {
+  const flat = StyleSheet.flatten(style) || {};
+  const weight =
+    Number(flat.fontWeight) || (flat.fontWeight === "bold" ? 700 : 400);
+  const fontFamily =
+    weight >= 700
+      ? "DMSans_700Bold"
+      : weight >= 500
+        ? "DMSans_600SemiBold"
+        : "DMSans_400Regular";
+  return (
+    <NativeText
+      {...props}
+      style={[
+        { color: "#24324c" },
+        style,
+        { fontFamily, fontWeight: "normal" },
+      ]}
+    />
+  );
+}
+const ink = "#24324c",
+  teal = "#5146c8",
+  muted = "#68758c",
+  border = "#e3e7f0";
 const S = StyleSheet.create({
   page: {
     flex: 1,
-    backgroundColor: "#f2f5f1",
+    backgroundColor: "#f5f6fb",
     paddingTop: StatusBar.currentHeight || 0,
   },
   body: {
     paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingVertical: 28,
     gap: 16,
     width: "100%",
-    maxWidth: 940,
+    maxWidth: 1020,
     alignSelf: "center",
     paddingBottom: 64,
   },
@@ -61,51 +100,77 @@ const S = StyleSheet.create({
     gap: 16,
     borderWidth: 1,
     borderColor: border,
+    shadowColor: "#313650",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.035,
+    shadowRadius: 16,
+    elevation: 1,
   },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   small: { color: muted, fontSize: 14, lineHeight: 21 },
   input: {
     borderWidth: 1,
-    borderColor: "#acbfba",
-    borderRadius: 10,
+    borderColor: "#d7ddea",
+    borderRadius: 14,
+    minHeight: 52,
+    fontFamily: "DMSans_400Regular",
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
     color: ink,
-    backgroundColor: "#fbfcfa",
+    backgroundColor: "#fafbfe",
   },
   hero: {
     overflow: "hidden",
-    padding: 26,
-    borderRadius: 22,
-    backgroundColor: "#104940",
+    padding: 28,
+    borderRadius: 24,
+    backgroundColor: "#292650",
     gap: 10,
   },
   heroTitle: {
     fontWeight: "800",
-    fontSize: 33,
+    fontSize: 29,
     color: "#fff",
-    letterSpacing: -1,
+    letterSpacing: -0.6,
+    lineHeight: 37,
   },
-  heroSub: { color: "#d5eae2", fontSize: 15, lineHeight: 23 },
+  heroSub: { color: "#dcdef4", fontSize: 15, lineHeight: 23 },
 });
 function Btn({ title, onPress, tone = "primary" }) {
+  const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
+  async function handlePress() {
+    if (submitting.current) return;
+    submitting.current = true;
+    setBusy(true);
+    try {
+      await onPress();
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  }
   const quiet = tone === "quiet",
     danger = tone === "danger";
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onPress}
+      onPress={handlePress}
+      disabled={busy}
+      accessibilityState={{ disabled: busy, busy }}
       style={({ pressed }) => ({
         backgroundColor: quiet ? "transparent" : danger ? "#fff2ee" : teal,
-        borderRadius: 10,
-        minHeight: 42,
+        borderRadius: 14,
+        minHeight: 52,
+        borderWidth: quiet ? 0 : 1,
+        borderColor: danger ? "#f3dcd5" : "#5146c8",
+        transform: [{ scale: pressed ? 0.985 : 1 }],
         paddingHorizontal: quiet ? 4 : 17,
         paddingVertical: 10,
         alignSelf: quiet ? "flex-start" : "stretch",
         justifyContent: "center",
         alignItems: "center",
-        opacity: pressed ? 0.72 : 1,
+        opacity: busy || pressed ? 0.72 : 1,
       })}
     >
       <Text
@@ -115,7 +180,7 @@ function Btn({ title, onPress, tone = "primary" }) {
           color: quiet ? teal : danger ? "#963b31" : "white",
         }}
       >
-        {title}
+        {busy ? "Memproses…" : title}
       </Text>
     </Pressable>
   );
@@ -144,7 +209,14 @@ function Input({ label, ...props }) {
   );
 }
 function Card({ children }) {
-  return <View style={S.card}>{children}</View>;
+  const compact = useWindowDimensions().width < 600;
+  return (
+    <View
+      style={[S.card, compact && { padding: 20, borderRadius: 20, gap: 16 }]}
+    >
+      {children}
+    </View>
+  );
 }
 function Badge({ value }) {
   const colors = {
@@ -152,6 +224,10 @@ function Badge({ value }) {
     diterima: ["#d6f1df", "#195a39"],
     menunggu: ["#fff2ca", "#77570a"],
     ditolak: ["#ffebe7", "#873c35"],
+    terjadwal: ["#eeebff", "#5146aa"],
+    ditutup: ["#edf0f6", "#58657b"],
+    Asisten: ["#eeebff", "#5146aa"],
+    Praktikan: ["#e5f3ef", "#25654f"],
   };
   const [bg, fg] = colors[value] || ["#e8eeed", "#405955"];
   return (
@@ -170,13 +246,27 @@ function Badge({ value }) {
     </View>
   );
 }
-function Banner({ title, detail, tag }) {
+function Banner({ title, detail, tag, status }) {
   return (
     <View style={S.hero}>
+      <View
+        pointerEvents="none"
+        accessibilityElementsHidden
+        style={{
+          position: "absolute",
+          right: -35,
+          top: -65,
+          width: 190,
+          height: 190,
+          borderRadius: 100,
+          borderWidth: 32,
+          borderColor: "#3a3568",
+        }}
+      />
       {tag && (
         <Text
           style={{
-            color: "#c0e398",
+            color: "#c6c0ff",
             fontWeight: "700",
             letterSpacing: 1.3,
             fontSize: 12,
@@ -189,6 +279,7 @@ function Banner({ title, detail, tag }) {
         {title}
       </Text>
       {detail && <Text style={S.heroSub}>{detail}</Text>}
+      {status && <Badge value={status} />}
     </View>
   );
 }
@@ -200,17 +291,17 @@ function Entry({ title, detail, status, onPress }) {
       style={({ pressed }) => [
         S.card,
         S.row,
-        { padding: 18, backgroundColor: pressed ? "#eff7ef" : "white" },
+        { padding: 18, backgroundColor: pressed ? "#f2f0ff" : "white" },
       ]}
     >
       <View
-        style={{ backgroundColor: "#e6f0dd", borderRadius: 12, padding: 11 }}
+        style={{ backgroundColor: "#efedff", borderRadius: 16, padding: 14 }}
       >
         <Text style={{ color: teal, fontSize: 20, fontWeight: "700" }}>
           {status ? "◷" : "▦"}
         </Text>
       </View>
-      <View style={{ flex: 1, gap: 6 }}>
+      <View style={{ flex: 1, minWidth: 0, gap: 7 }}>
         <Text style={{ fontSize: 18, color: ink, fontWeight: "700" }}>
           {title}
         </Text>
@@ -228,7 +319,7 @@ function Fold({ title, children }) {
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        style={S.row}
+        style={[S.row, { minHeight: 40 }]}
         onPress={() => set(!open)}
       >
         <Text style={{ flex: 1, fontWeight: "700", color: ink, fontSize: 17 }}>
@@ -242,7 +333,7 @@ function Fold({ title, children }) {
 }
 function Note({ children }) {
   return (
-    <View style={{ backgroundColor: "#e7efea", borderRadius: 12, padding: 14 }}>
+    <View style={{ backgroundColor: "#edf0f8", borderRadius: 12, padding: 14 }}>
       <Text style={S.small}>{children}</Text>
     </View>
   );
@@ -269,7 +360,7 @@ function LoginArt() {
             width: 19,
             height: h,
             borderRadius: 10,
-            backgroundColor: ["#86b9a5", "#bfe997", "#ecf5cf"][i % 3],
+            backgroundColor: ["#9286d8", "#c2b7f3", "#eee7ff"][i % 3],
             transform: [{ rotate: "24deg" }],
           }}
         />
@@ -294,16 +385,7 @@ function act(fn) {
     }
   };
 }
-function confirm(title, fn) {
-  if (typeof document !== "undefined") {
-    if (window.confirm(title)) act(fn)();
-    return;
-  }
-  Alert.alert(title, "Perubahan berlaku bagi peserta kelas.", [
-    { text: "Batal", style: "cancel" },
-    { text: "Lanjutkan", onPress: act(fn) },
-  ]);
-}
+const confirm = confirmAction;
 function required(v, n) {
   if (!v.trim() || v.trim().length > n)
     throw Error("Isi teks 1–" + n + " karakter.");
@@ -377,12 +459,14 @@ function Login() {
         ]}
       >
         <View style={{ gap: 10 }}>
-          <Text style={S.heroTitle}>Ruang Praktikum</Text>
+          <Text style={S.heroTitle}>
+            {wide ? "Ruang Praktikum" : "Portal praktikum"}
+          </Text>
           <Text style={S.heroSub}>
             Jadwal, presensi, dan izin praktikum dalam satu ruang.
           </Text>
         </View>
-        <LoginArt />
+        {wide && <LoginArt />}
       </View>
       <View style={{ flex: wide ? 1 : undefined }}>
         <Card>
@@ -436,7 +520,18 @@ function Account({ u }) {
   return (
     <>
       <View
-        style={[S.row, { flexWrap: "wrap", justifyContent: "space-between" }]}
+        style={[
+          S.row,
+          {
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            backgroundColor: "#fff",
+            borderWidth: 1,
+            borderColor: border,
+            borderRadius: 18,
+            padding: 14,
+          },
+        ]}
       >
         <View style={{ flex: 1, gap: 4 }}>
           <Badge
@@ -446,7 +541,14 @@ function Account({ u }) {
           />
           <Text style={S.small}>{u.email}</Text>
         </View>
-        <Btn tone="quiet" title="Keluar" onPress={act(() => signOut(auth))} />
+        <Btn
+          tone="quiet"
+          title="Keluar"
+          onPress={act(async () => {
+            await disablePush(u.uid);
+            await signOut(auth);
+          })}
+        />
       </View>
       {error ? <Text>{error}</Text> : null}
       <Live v={profile}>
@@ -470,6 +572,7 @@ function Account({ u }) {
   );
 }
 function Home({ u, staff, name }) {
+  const [page, Page] = useState("classes");
   const [cid, C] = useState(null),
     [title, T] = useState("");
   const list = useLive(
@@ -484,8 +587,35 @@ function Home({ u, staff, name }) {
   );
   const rows = (list.data || []).filter((c) => !c.archived),
     selected = rows.find((c) => c.id === cid);
+  if (page === "maps")
+    return (
+      <MapsScreen
+        {...{ u, staff }}
+        classes={rows}
+        back={() => Page("classes")}
+      />
+    );
+  if (page === "notifications")
+    return (
+      <>
+        <Btn title="‹ Semua kelas" onPress={() => Page("classes")} />
+        <NotificationsPanel u={u} />
+      </>
+    );
   return (
     <Live v={list}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+        <Btn
+          tone="quiet"
+          title="Peta & Laboratorium"
+          onPress={() => Page("maps")}
+        />
+        <Btn
+          tone="quiet"
+          title="Notifikasi"
+          onPress={() => Page("notifications")}
+        />
+      </View>
       {selected ? (
         <ClassView
           key={cid}
@@ -607,9 +737,21 @@ function ClassView({ c, u, staff, name, back }) {
             <Btn
               title="Tambahkan peserta"
               onPress={act(async () => {
-                if (!/^[A-Za-z0-9_-]{1,128}$/.test(uid.trim()))
+                if (!uid.trim() || uid.trim().length > 128 || uid.includes("/"))
                   throw Error("UID tidak valid.");
-                await updateDoc(ref, { members: arrayUnion(uid.trim()) });
+                if (c.members.includes(uid.trim()))
+                  throw Error("Peserta sudah terdaftar di kelas ini.");
+                if (c.members.length >= 200)
+                  throw Error("Kelas sudah memiliki 200 peserta.");
+                try {
+                  await updateDoc(ref, { members: arrayUnion(uid.trim()) });
+                } catch (error) {
+                  if (error.code === "permission-denied")
+                    throw Error(
+                      "Peserta gagal ditambahkan. Pastikan UID benar, praktikan telah menyimpan profil, dan Anda masih mengelola kelas ini.",
+                    );
+                  throw error;
+                }
                 U("");
               })}
             />
@@ -637,7 +779,14 @@ function ClassView({ c, u, staff, name, back }) {
     </>
   );
 }
-const fmt = (t) => t?.toDate().toLocaleString("id-ID") || "Menunggu server";
+const fmt = (t) =>
+  t?.toDate().toLocaleString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }) || "Menunggu server";
 function local(t) {
   const d = t.toDate();
   return new Date(+d - d.getTimezoneOffset() * 60000)
@@ -647,15 +796,16 @@ function local(t) {
 }
 function Editor({ s, save }) {
   const [title, T] = useState(s?.title || ""),
-    [time, D] = useState(s ? local(s.at) : "");
+    [time, D] = useState(s ? local(s.at) : ""),
+    [labId, Lab] = useState(s?.labId || "");
   return (
     <Fold title={s ? "Edit jadwal sesi" : "Tambah sesi"}>
       <Input label="Nama praktikum" value={title} onChangeText={T} />
-      <Input
-        label="Waktu lokal (YYYY-MM-DD HH:mm)"
-        placeholder="2026-11-12 09:00"
+      <LabPicker value={labId} onChange={Lab} />
+      <SchedulePicker
         value={time}
-        onChangeText={D}
+        onChange={D}
+        minimumDate={local(Timestamp.now()).slice(0, 10)}
       />
       <Btn
         title="Simpan jadwal"
@@ -667,7 +817,13 @@ function Editor({ s, save }) {
             local(Timestamp.fromDate(dt)) !== time
           )
             throw Error("Tanggal atau waktu tidak valid.");
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (dt < today && (!s || time !== local(s.at)))
+            throw Error("Tanggal praktikum tidak boleh sebelum hari ini.");
+          if (!labId) throw Error("Pilih laboratorium untuk sesi ini.");
           await save({
+            labId,
             title: required(title, 100),
             at: Timestamp.fromDate(dt),
           });
@@ -683,13 +839,14 @@ function Editor({ s, save }) {
 function Session({ c, s, u, staff, name, back }) {
   const path = ["classes", c.id, "sessions", s.id],
     ref = doc(db, ...path),
-    [reason, R] = useState("");
+    [reason, R] = useState(""),
+    [attendance, Attend] = useState(false);
   const rec = useLive(
     () =>
       staff
         ? collection(db, ...path, "records")
         : doc(db, ...path, "records", u.uid),
-    s.id + u.uid,
+    c.id + "/" + s.id + "/" + u.uid + "/" + staff,
     !staff,
   );
   const rows = staff ? rec.data || [] : rec.data ? [rec.data] : [];
@@ -706,11 +863,17 @@ function Session({ c, s, u, staff, name, back }) {
           }
         : {}),
     });
+  if (attendance)
+    return <AttendanceScreen {...{ c, s, u }} back={() => Attend(false)} />;
   return (
     <>
       <Btn tone="quiet" title={"‹ " + c.title} onPress={back} />
-      <Banner title={s.title} tag={c.title} detail={fmt(s.at)} />
-      <Badge value={s.status} />
+      <Banner
+        title={s.title}
+        tag={c.title}
+        detail={fmt(s.at)}
+        status={s.status}
+      />
       {staff && (
         <>
           <Btn
@@ -728,10 +891,27 @@ function Session({ c, s, u, staff, name, back }) {
       )}
       <Live v={rec}>
         {staff && (
-          <Text>
-            {rows.filter((r) => r.kind === "hadir").length} hadir ·{" "}
-            {rows.filter((r) => r.kind === "izin").length} pengajuan izin
-          </Text>
+          <View style={S.row}>
+            {[
+              ["hadir", "Hadir"],
+              ["izin", "Pengajuan izin"],
+            ].map(([kind, label]) => (
+              <View
+                key={kind}
+                style={{
+                  flex: 1,
+                  padding: 15,
+                  borderRadius: 14,
+                  backgroundColor: kind === "hadir" ? "#e7f4ef" : "#fff1d3",
+                }}
+              >
+                <Text style={{ fontSize: 24, fontWeight: "800", color: ink }}>
+                  {rows.filter((r) => r.kind === kind).length}
+                </Text>
+                <Text style={S.small}>{label}</Text>
+              </View>
+            ))}
+          </View>
         )}
         {!rows.length && (
           <Note>Belum ada catatan kehadiran untuk sesi ini.</Note>
@@ -746,6 +926,22 @@ function Session({ c, s, u, staff, name, back }) {
               <>
                 <Text>Alasan: {r.reason}</Text>
                 <Text>Kategori AI: {r.category || r.ai}</Text>
+                <Text style={S.small}>
+                  AI hanya membantu klasifikasi; keputusan tetap oleh asisten.
+                </Text>
+                {staff && r.ai !== "selesai" && (
+                  <Btn
+                    tone="quiet"
+                    title="Coba klasifikasi AI"
+                    onPress={act(() =>
+                      callBackend("retryClassification", {
+                        classId: c.id,
+                        sessionId: s.id,
+                        uid: r.id,
+                      }),
+                    )}
+                  />
+                )}
                 <Text style={S.small}>Keputusan asisten</Text>
                 <Badge value={r.decision} />
                 {staff &&
@@ -775,17 +971,14 @@ function Session({ c, s, u, staff, name, back }) {
         {!staff && !rows.length && (
           <>
             {s.status === "terbuka" ? (
-              <Btn
-                title="Catat kehadiran saya"
-                onPress={act(() => submit("hadir"))}
-              />
+              <Btn title="Buka halaman presensi" onPress={() => Attend(true)} />
             ) : (
               <Note>Presensi tidak dibuka.</Note>
             )}
             {s.status !== "ditutup" && (
               <Card>
                 <Input
-                  label="Alasan izin (dikirim ke model pengajar)"
+                  label="Alasan izin"
                   multiline
                   maxLength={1500}
                   value={reason}
@@ -815,6 +1008,13 @@ function Session({ c, s, u, staff, name, back }) {
   );
 }
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    DMSans_400Regular,
+    DMSans_600SemiBold,
+    DMSans_700Bold,
+  });
+  const compact = useWindowDimensions().width < 600;
+  const [localDemo, Demo] = useState(false);
   const [u, U] = useState(undefined),
     [err, E] = useState("");
   useEffect(
@@ -822,11 +1022,21 @@ export default function App() {
       configured ? onAuthStateChanged(auth, U, (e) => E(e.message)) : undefined,
     [],
   );
+  if (!fontsLoaded && !fontError)
+    return (
+      <SafeAreaView style={S.page}>
+        <NativeText style={{ padding: 24 }}>Memuat tampilan…</NativeText>
+      </SafeAreaView>
+    );
   return (
     <SafeAreaView style={S.page}>
+      <StatusBar barStyle="dark-content" backgroundColor="#f5f6fb" />
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={S.body}
+        contentContainerStyle={[
+          S.body,
+          compact && { paddingHorizontal: 14, paddingTop: 12, gap: 12 },
+        ]}
       >
         <View
           style={[
@@ -839,7 +1049,7 @@ export default function App() {
           ]}
         >
           <View style={{ backgroundColor: teal, borderRadius: 10, padding: 8 }}>
-            <Text style={{ color: "#ddf4af", fontWeight: "800", fontSize: 17 }}>
+            <Text style={{ color: "#ffffff", fontWeight: "800", fontSize: 17 }}>
               Rp
             </Text>
           </View>
@@ -847,7 +1057,19 @@ export default function App() {
             Ruang Praktikum
           </Text>
         </View>
-        {!configured ? (
+        {process.env.EXPO_PUBLIC_DEMO === "1" && (
+          <Note>
+            Mode emulator lokal — data ini terpisah dari Firebase online.
+          </Note>
+        )}
+        <Btn
+          tone="quiet"
+          title={localDemo ? "Kembali ke Firebase" : "Demo lokal Sprint 1"}
+          onPress={() => Demo(!localDemo)}
+        />
+        {localDemo ? (
+          <LocalDemo back={() => Demo(false)} />
+        ) : !configured ? (
           <Text>
             Lengkapi konfigurasi Firebase di .env lalu mulai ulang Expo.
           </Text>
@@ -861,6 +1083,7 @@ export default function App() {
           <Login />
         )}
       </ScrollView>
+      <ConfirmHost />
     </SafeAreaView>
   );
 }
