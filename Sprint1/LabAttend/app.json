@@ -1,0 +1,1 @@
+{"expo":{"name":"LabAttend","slug":"labattend","scheme":"labattend","version":"1.0.0","orientation":"portrait","userInterfaceStyle":"light","plugins":["expo-router"],"web":{"bundler":"metro","output":"single"}}}
