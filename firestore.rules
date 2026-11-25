@@ -6,7 +6,7 @@ service cloud.firestore {
   function staff(){return signed() && request.auth.token.get('asisten',false)==true;}
   function validText(s,n){return s is string && s.size()>0 && s.size()<=n && s.matches('(?s).*\\S.*');}
   match /labs/{lab}{
-   function valid(d){return d.keys().hasOnly(['title','owner','latitude','longitude','radius','archived']) && validText(d.title,100) && d.latitude is number && d.latitude>=-90 && d.latitude<=90 && d.longitude is number && d.longitude>=-180 && d.longitude<=180 && d.radius is number && d.radius>=10 && d.radius<=1000 && d.archived is bool;}
+   function valid(d){return d.keys().hasOnly(['title','owner','latitude','longitude','radius','archived','name','building','updatedAt']) && validText(d.title,100) && d.latitude is number && d.latitude>=-90 && d.latitude<=90 && d.longitude is number && d.longitude>=-180 && d.longitude<=180 && d.radius is number && d.radius>=10 && d.radius<=1000 && d.archived is bool;}
    allow read: if signed();
    allow create: if staff() && valid(request.resource.data) && request.resource.data.owner==uid() && !request.resource.data.archived;
    allow update: if staff() && resource.data.owner==uid() && valid(request.resource.data) && request.resource.data.owner==uid();
@@ -40,7 +40,7 @@ service cloud.firestore {
    allow update: if owner() && validClass(request.resource.data) && request.resource.data.owner==uid() && validMembership(resource.data.members,request.resource.data.members);
    match /sessions/{s}{
     function session(){return get(/databases/$(db)/documents/classes/$(c)/sessions/$(s)).data;}
-    function validSession(d){return d.keys().hasOnly(['title','at','status','labId']) && validText(d.title,100) && d.at is timestamp && d.status in ['terjadwal','terbuka','ditutup','diarsipkan'];}
+    function validSession(d){return d.keys().hasOnly(['title','at','status','labId','radius','classId','classTitle']) && validText(d.title,100) && d.at is timestamp && (!('radius' in d) || (d.radius is number && d.radius>=10 && d.radius<=1000)) && (!('classId' in d) || d.classId==c) && (!('classTitle' in d) || validText(d.classTitle,100)) && d.status in ['terjadwal','terbuka','ditutup','diarsipkan'];}
     allow read: if owner() || member();
     function labValid(d){return d.labId is string && exists(/databases/$(db)/documents/labs/$(d.labId)) && !get(/databases/$(db)/documents/labs/$(d.labId)).data.archived;}
     function future(d){return d.at >= (request.time + duration.value(7,'h')).date() - duration.value(7,'h');}

@@ -10,7 +10,7 @@ const {
 } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 const projectId =
-    process.env.FIREBASE_PROJECT_ID || "ppkpostutskelompok12-5862a",
+    process.env.FIREBASE_PROJECT_ID || "ppkpostutskelompok12",
   emulator = !!process.env.FIRESTORE_EMULATOR_HOST;
 let credential;
 if (!emulator && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {

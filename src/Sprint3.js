@@ -357,10 +357,15 @@ export function AttendanceScreen({ c, s, u, back }) {
     }
     return onSnapshot(
       doc(db, "labs", s.labId),
-      (d) => L(d.exists() ? d.data() : null),
+      (d) =>
+        L(
+          d.exists()
+            ? { ...d.data(), radius: s.radius ?? d.data().radius }
+            : null,
+        ),
       (e) => E(e.message),
     );
-  }, [s.labId]);
+  }, [s.labId, s.radius]);
   useEffect(
     () =>
       onSnapshot(

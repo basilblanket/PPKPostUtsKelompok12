@@ -25,7 +25,10 @@ exports.attendSession = onCall({ region: "asia-southeast2" }, async (req) => {
     );
     const labId = validId(session.data().labId),
       lab = await tx.get(db.doc(`labs/${labId}`));
-    const meters = validateLocation(req.data.location, lab.data());
+    const meters = validateLocation(req.data.location, {
+      ...lab.data(),
+      radius: session.data().radius ?? lab.data()?.radius,
+    });
     tx.create(rr, {
       kind: "hadir",
       name: profile.data().name,

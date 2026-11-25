@@ -106,3 +106,5 @@ npx expo export --platform all --output-dir dist
 Test tidak mengirim push ke perangkat sungguhan dan tidak memanggil model pengajar dengan key asli. Deployment rules, login Firebase online, pembacaan koordinat online, dan penolakan akses backend untuk nonanggota telah diverifikasi. Uji lokasi nyata dan push end-to-end perlu perangkat serta izin pengguna.
 
 Pemeriksaan API Clevecode `GET /v1/models` pada pengerjaan ini mendapat HTTP 403 dengan key yang sebelumnya diberikan. Respons tersebut belum membuktikan model/kontrak yang tersedia; konfigurasi AI nyata tetap perlu akses API yang diterima penyedia.
+
+Proyek Firebase aktif: `ppkpostutskelompok12` (Web App Kel12). Data existing Informatika D / Lab D dipertahankan. Akun demo online dari proyek `ppkpostutskelompok12-5862a` tidak otomatis tersedia di proyek ini. Gunakan akun yang terdaftar di Authentication proyek aktif.
